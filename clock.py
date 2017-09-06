@@ -63,7 +63,7 @@ def formatTimedelta(d):
     days, s = divmod(s, 24 * 60 * 60)
     hours, s = divmod(s, 60 * 60)
     minutes, s = divmod(s, 60)
-    return ", ".join(str(count) + " " + name for count, name in zip(map(int, (days, hours, minutes, s)), ("days", "hours", "minutes", "seconds")) if count != 0)
+    return ", ".join(str(count) + " " + (name[:-1] if count == 1 else name) for count, name in zip(map(int, (days, hours, minutes, s)), ("days", "hours", "minutes", "seconds")) if count != 0)
 
 def alarm():
     now = datetime.datetime.now()
