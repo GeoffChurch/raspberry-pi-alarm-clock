@@ -42,7 +42,6 @@ alarms = [ # TODO read from file at each interval
     Time(day=day_stoi["We"], hour=8, minute=0),
     Time(day=day_stoi["Th"], hour=8, minute=0),
     Time(day=day_stoi["Fr"], hour=8, minute=0),
-    Time(day=day_stoi["We"], hour=20, minute=56),
 ]
 
 def say(utterance):
@@ -66,32 +65,24 @@ def formatTimedelta(d):
     minutes, s = divmod(s, 60)
     return ", ".join(str(count) + " " + (name[:-1] if count == 1 else name) for count, name in zip(map(int, (days, hours, minutes, s)), ("days", "hours", "minutes", "seconds")) if count != 0)
 
-def alarm():
-    now = datetime.datetime.now()
-    say("I am the clock. Beep beep. It is {}. It is time to wake up. It is time to accomplish your dreams.".format(formatDatetime(datetime.datetime.now())))
-
 class clock(daemon.daemon):
-    REST_TIME = 15
+    REST_TIME = 5 # seconds of rest between checks
     DIR = os.path.expanduser("~/.clock/")
     if not os.path.exists(DIR):
         os.makedirs(DIR)
     NXT_ALARM_FILE = DIR + "next_alarm_cache.pkl"
 
     def run(self):
-        next_alarm = self.getNextAlarm()
-        if datetime.datetime.now() < next_alarm:
-	        say("I am the clock. The next alarm is in {}, at {}.".format(formatTimedelta(next_alarm - datetime.datetime.now()), formatDatetime(next_alarm)))
         while True:
             try:
                 now = datetime.datetime.now()
                 next_alarm = self.getNextAlarm()
                 diff = now - next_alarm
-                if diff >= datetime.timedelta():
-                    if diff.seconds >= self.REST_TIME:
-                        say("Bloody hell. It looks like I am late by {}. I shall punish myself. Ouch. Ouch. Ouch. No, ’tis not so deep as a well nor so wide as a church-door, but ’tis enough, ’twill serve. Ask for me tomorrow, and you shall find me a grave clock.".format(formatTimedelta(diff)))
-                    else:
-                        alarm()
-                    self.resetCache() # clear cache now that we've sounded the alarm
+                if diff >= datetime.timedelta(): # if the alarm is due
+                    if diff.total_seconds() >= self.REST_TIME: # and we're late
+                        say("I am the clock. Bloody hell. It looks like I am late by {}. I shall punish myself. Ouch. Ouch. Ouch. No, ’tis not so deep as a well nor so wide as a church-door, but ’tis enough, ’twill serve. Ask for me tomorrow, and you shall find me a grave clock.".format(formatTimedelta(diff)))
+                    else: # otherwise
+                        say("I am the clock. Beep beep. It is {}. It is time to wake up. It is time to accomplish your dreams.".format(formatDatetime(datetime.datetime.now())))
                     seconds_to_expiration = (next_alarm + datetime.timedelta(minutes=1) - datetime.datetime.now()).total_seconds()
                     time.sleep(max(self.REST_TIME, seconds_to_expiration + 0.1)) # sleep until alarm is expired
                 else:
@@ -101,24 +92,19 @@ class clock(daemon.daemon):
                 traceback.print_exc()
                 
     def getNextAlarm(self):
+        now_dt = datetime.datetime.now()
+        now = Time(day=now_dt.weekday(), hour=now_dt.hour, minute=now_dt.minute)
+        nxt = min((alarm - now for alarm in alarms if alarm != now), default=None) # probably not worth binary search
+        nxt_dt = (now_dt + datetime.timedelta(days=nxt.day(), hours=nxt.hour(), minutes=nxt.minute())).replace(second=0, microsecond=0)
         try:
             with open(self.NXT_ALARM_FILE, 'rb') as f:
                 nxt_dt_cached = pickle.load(f)
         except FileNotFoundError:
             print("WARNING: cache file \"{}\" not found. Starting fresh.".format(self.NXT_ALARM_FILE))
             nxt_dt_cached = datetime.datetime.max
-
-        now_dt = datetime.datetime.now()
-        now = Time(day=now_dt.weekday(), hour=now_dt.hour, minute=now_dt.minute)
-        nxt = min((alarm - now for alarm in alarms), default=None) # probably not worth binary search
-        nxt_dt = min(nxt_dt_cached, (now_dt + datetime.timedelta(days=nxt.day(), hours=nxt.hour(), minutes=nxt.minute())).replace(second=0, microsecond=0))
         with open(self.NXT_ALARM_FILE, 'wb') as f:
             pickle.dump(nxt_dt, f)
-        return nxt_dt
+        return min(nxt_dt, nxt_dt_cached)
     
-    def resetCache(self):
-         with open(self.NXT_ALARM_FILE, 'wb') as f:
-            pickle.dump(datetime.datetime.max, f)
-
 c = clock('/tmp/clock.pid')
 getattr(c, sys.argv[1])()
