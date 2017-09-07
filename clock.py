@@ -42,11 +42,12 @@ alarms = [ # TODO read from file at each interval
     Time(day=day_stoi["We"], hour=8, minute=0),
     Time(day=day_stoi["Th"], hour=8, minute=0),
     Time(day=day_stoi["Fr"], hour=8, minute=0),
+    Time(day=day_stoi["We"], hour=20, minute=56),
 ]
 
 def say(utterance):
     print(utterance)
-    subprocess.call(["espeak", utterance])
+    subprocess.call(['bash','-c', "espeak \"{}\" --stdout | aplay -D sysdefault:CARD=Device".format(utterance)])
 
 def formatDatetime(d):
     def formatInteger(i):
@@ -78,16 +79,18 @@ class clock(daemon.daemon):
 
     def run(self):
         next_alarm = self.getNextAlarm()
-        say("I am the clock. The next alarm is in {}, at {}.".format(formatTimedelta(next_alarm - datetime.datetime.now()), formatDatetime(next_alarm)))
+        if datetime.datetime.now() < next_alarm:
+	        say("I am the clock. The next alarm is in {}, at {}.".format(formatTimedelta(next_alarm - datetime.datetime.now()), formatDatetime(next_alarm)))
         while True:
             try:
                 now = datetime.datetime.now()
                 next_alarm = self.getNextAlarm()
                 diff = now - next_alarm
                 if diff >= datetime.timedelta():
-                    alarm()
                     if diff.seconds >= self.REST_TIME:
-                        say("WARNING: alarm is late by {}!".format(formatTimedelta(diff))) # TODO read out loud
+                        say("Bloody hell. It looks like I am late by {}. I shall punish myself. Ouch. Ouch. Ouch. No, ’tis not so deep as a well nor so wide as a church-door, but ’tis enough, ’twill serve. Ask for me tomorrow, and you shall find me a grave clock.".format(formatTimedelta(diff)))
+                    else:
+                        alarm()
                     self.resetCache() # clear cache now that we've sounded the alarm
                     seconds_to_expiration = (next_alarm + datetime.timedelta(minutes=1) - datetime.datetime.now()).total_seconds()
                     time.sleep(max(self.REST_TIME, seconds_to_expiration + 0.1)) # sleep until alarm is expired
